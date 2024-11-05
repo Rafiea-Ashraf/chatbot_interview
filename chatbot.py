@@ -1,40 +1,78 @@
 import streamlit as st
 from transformers import pipeline
 from io import StringIO
+import fitz  # PyMuPDF for PDF handling
+from docx import Document
 
-# Cache the model loading to improve performance
+# Load models with caching to improve performance
 @st.cache_resource
 def load_models():
-    # Load question generation and summarization pipelines
     question_generator = pipeline("text2text-generation", model="valhalla/t5-base-qg-hl")
     summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
     return question_generator, summarizer
 
 question_generator, summarizer = load_models()
 
+def extract_text_from_file(uploaded_file):
+    if uploaded_file.type == "text/plain":  # Text file
+        return StringIO(uploaded_file.getvalue().decode("utf-8")).read()
+    elif uploaded_file.type == "application/pdf":  # PDF file
+        text = ""
+        pdf_document = fitz.open("pdf", uploaded_file.read())
+        for page_num in range(pdf_document.page_count):
+            page = pdf_document[page_num]
+            text += page.get_text()
+        return text
+    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":  # Word file (.docx)
+        doc = Document(uploaded_file)
+        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        return text
+    else:
+        st.error("Unsupported file type.")
+        return None
+
 def generate_questions(text):
     input_text = f"generate questions: {text}"
     questions = question_generator(input_text, max_length=64, num_return_sequences=5)
     return [q['generated_text'] for q in questions]
 
-# Streamlit app layout
-st.title("CV Interview Prep Chatbot")
-st.write("Upload your CV (in text format), and this chatbot will generate interview questions based on it.")
+# Function to set a background image
+def set_background_image(image_url):
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("{image_url}");
+            background-size: cover;
+            background-position: center;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
-# File uploader
-uploaded_file = st.file_uploader("Choose a CV file", type="txt")
+# Set background image with the provided link
+set_background_image("https://wallpaperset.com/w/full/4/9/7/500747.jpg")
 
+# App title with emoji and color styling
+st.markdown("<h1 style='color: #ff69b4; text-align: center;'>🎀 CV Interview Prep Chatbot 🎀</h1>", unsafe_allow_html=True)
+st.write("<p style='text-align: center;'>Upload your CV, and this chatbot will generate cute interview questions based on it. 💖💼</p>", unsafe_allow_html=True)
+
+# File uploader with multiple file type support
+st.markdown("<h3 style='color: #ff69b4;'>💌 Upload your CV (PDF, Word, or Text):</h3>", unsafe_allow_html=True)
+uploaded_file = st.file_uploader("", type=["txt", "pdf", "docx"])
+
+# Display stickers if file is uploaded
 if uploaded_file is not None:
-    # Read uploaded file content
-    cv_text = StringIO(uploaded_file.getvalue().decode("utf-8")).read()
+    # Extract text from the uploaded file
+    cv_text = extract_text_from_file(uploaded_file)
     
-    # Generate a summary of the CV
-    summary = summarizer(cv_text, max_length=200, min_length=30, do_sample=False)[0]['summary_text']
-    st.subheader("Summary of your CV:")
-    st.write(summary)
+    if cv_text:
+        # Generate a summary of the CV
+        summary = summarizer(cv_text, max_length=200, min_length=30, do_sample=False)[0]['summary_text']
+        st.markdown("<h3 style='color: #ff69b4;'>✨ Summary of your CV:</h3>", unsafe_allow_html=True)
+        st.write(summary)
 
-    # Generate interview questions based on the summary
-    questions = generate_questions(summary)
-    st.subheader("Generated Interview Questions:")
-    for i, question in enumerate(questions):
-        st.write(f"{i + 1}. {question}")
+        # Generate interview questions based on the summary
+        st.markdown("<h3 style='color: #ff69b4;'>📝 Generated Interview Questions:</h3>", unsafe_allow_html=True)
+        questions = generate_questions(su
