@@ -12,8 +12,8 @@ def load_models():
 
 # Function to summarize text
 def summarize_text(text, summarizer):
-    if not text.strip():
-        st.error("No text available for summarization.")
+    if len(text) < 20:  # Ensure text is long enough
+        st.error("The text is too short for summarization. Please provide a longer document.")
         return ""
     try:
         summary = summarizer(text, max_length=100, min_length=30, do_sample=False)
@@ -49,9 +49,14 @@ def generate_questions(text, question_generator):
     if not text.strip():
         st.error("No text available for question generation.")
         return []
+    questions = []
     try:
-        questions = question_generator(text, max_length=50, num_return_sequences=5, do_sample=False)
-        return [q['generated_text'] for q in questions]
+        # Generate one question at a time
+        for sentence in text.split('. '):  # Split into sentences for question generation
+            if sentence:
+                question = question_generator(sentence, max_length=50, do_sample=False)
+                questions.append(question[0]['generated_text'])
+        return questions
     except Exception as e:
         st.error(f"Error generating questions: {e}")
         return []
