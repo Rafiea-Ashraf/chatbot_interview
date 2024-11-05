@@ -75,4 +75,11 @@ if uploaded_file is not None:
 
         # Generate interview questions based on the summary
         st.markdown("<h3 style='color: #ff69b4;'>📝 Generated Interview Questions:</h3>", unsafe_allow_html=True)
-        questions = generate_questions(su
+        questions = generate_questions(summary)
+        for i, question in enumerate(questions):
+            st.write(f"{i + 1}. {question} 💬")
+
+    # Cute stickers section
+    st.markdown("<div style='text-align: center;'>🦄 🌈 🎉 🍓 🌸 🍩 🍪</div>", unsafe_allow_html=True)
+else:
+    st.markdown("<p style='color: #ff69b4; text-align: center;'>Please upload your CV to start generating questions!</p>", unsafe_allow_html=True)
