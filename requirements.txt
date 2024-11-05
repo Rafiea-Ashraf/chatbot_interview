@@ -1,6 +1,2 @@
 streamlit
 transformers
-sentencepiece
-torch
-PyMuPDF
-python-docx
