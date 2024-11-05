@@ -36,6 +36,12 @@ def generate_questions(text):
     questions = question_generator(input_text, max_length=64, num_return_sequences=5)
     return [q['generated_text'] for q in questions]
 
+def summarize_text(text):
+    if len(text) > 1000:  # Truncate text if too long
+        text = text[:1000]  # Limit to first 1000 characters
+    summary = summarizer(text, max_length=200, min_length=30, do_sample=False)
+    return summary[0]['summary_text']
+
 # Function to set a background image
 def set_background_image(image_url):
     st.markdown(
@@ -68,18 +74,25 @@ if uploaded_file is not None:
     cv_text = extract_text_from_file(uploaded_file)
     
     if cv_text:
-        # Generate a summary of the CV
-        summary = summarizer(cv_text, max_length=200, min_length=30, do_sample=False)[0]['summary_text']
-        st.markdown("<h3 style='color: #ff69b4;'>✨ Summary of your CV:</h3>", unsafe_allow_html=True)
-        st.write(summary)
+        try:
+            # Generate a summary of the CV
+            summary = summarize_text(cv_text)
+            st.markdown("<h3 style='color: #ff69b4;'>✨ Summary of your CV:</h3>", unsafe_allow_html=True)
+            st.write(summary)
 
-        # Generate interview questions based on the summary
-        st.markdown("<h3 style='color: #ff69b4;'>📝 Generated Interview Questions:</h3>", unsafe_allow_html=True)
-        questions = generate_questions(summary)
-        for i, question in enumerate(questions):
-            st.write(f"{i + 1}. {question} 💬")
+            # Generate interview questions based on the summary
+            st.markdown("<h3 style='color: #ff69b4;'>📝 Generated Interview Questions:</h3>", unsafe_allow_html=True)
+            questions = generate_questions(summary)
+            for i, question in enumerate(questions):
+                st.write(f"{i + 1}. {question} 💬")
 
-    # Cute stickers section
-    st.markdown("<div style='text-align: center;'>🦄 🌈 🎉 🍓 🌸 🍩 🍪</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"An error occurred during processing: {e}")
+
+    else:
+        st.error("The uploaded file does not contain readable text.")
 else:
     st.markdown("<p style='color: #ff69b4; text-align: center;'>Please upload your CV to start generating questions!</p>", unsafe_allow_html=True)
+
+# Cute stickers section
+st.markdown("<div style='text-align: center;'>🦄 🌈 🎉 🍓 🌸 🍩 🍪</div>", unsafe_allow_html=True)
