@@ -14,12 +14,11 @@ def load_question_generator():
 
 # Function to summarize text
 def summarize_text(text, summarizer):
-    max_length = 2000  # Set a max length for summarization
     if len(text) < 20:
         st.error("The text is too short for summarization. Please provide a longer document.")
         return ""
     
-    # Split text into chunks if it's too long
+    max_length = 2000  # Adjust based on model capabilities
     if len(text) > max_length:
         chunks = [text[i:i + max_length] for i in range(0, len(text), max_length)]
         summaries = []
@@ -30,12 +29,11 @@ def summarize_text(text, summarizer):
             except Exception as e:
                 st.error(f"Error summarizing text chunk: {e}")
                 return ""
-        return " ".join(summaries)  # Combine summaries from chunks
+        return " ".join(summaries)
 
-    # For texts that are within the limit, summarize normally
     try:
         summary = summarizer(text, max_length=100, min_length=30, do_sample=False)
-        return summary[0]['summary_text']
+        return summary[0]['summary_text'] if summary else "No summary generated."
     except Exception as e:
         st.error(f"Error summarizing text: {e}")
         return ""
