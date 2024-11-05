@@ -1,20 +1,38 @@
 import streamlit as st
 from transformers import pipeline
-import fitz  # PyMuPDF for PDF handling
-from docx import Document
+import gc
 
-# Load models with caching
-@st.cache_resource(show_spinner=False)
-def load_models():
-    question_generator = pipeline("text2text-generation", model="valhalla/t5-base-qg-hl")
-    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-    return question_generator, summarizer
+# Load the summarization model
+@st.cache_resource
+def load_summarizer():
+    return pipeline("summarization", model="facebook/bart-large-cnn")
+
+# Load the question generation model
+@st.cache_resource
+def load_question_generator():
+    return pipeline("question-generation", model="valhalla/t5-small-qa-qg-hl")
 
 # Function to summarize text
 def summarize_text(text, summarizer):
-    if len(text) < 20:  # Ensure text is long enough
+    max_length = 2000  # Set a max length for summarization
+    if len(text) < 20:
         st.error("The text is too short for summarization. Please provide a longer document.")
         return ""
+    
+    # Split text into chunks if it's too long
+    if len(text) > max_length:
+        chunks = [text[i:i + max_length] for i in range(0, len(text), max_length)]
+        summaries = []
+        for chunk in chunks:
+            try:
+                summary = summarizer(chunk, max_length=100, min_length=30, do_sample=False)
+                summaries.append(summary[0]['summary_text'])
+            except Exception as e:
+                st.error(f"Error summarizing text chunk: {e}")
+                return ""
+        return " ".join(summaries)  # Combine summaries from chunks
+
+    # For texts that are within the limit, summarize normally
     try:
         summary = summarizer(text, max_length=100, min_length=30, do_sample=False)
         return summary[0]['summary_text']
@@ -22,76 +40,39 @@ def summarize_text(text, summarizer):
         st.error(f"Error summarizing text: {e}")
         return ""
 
-# Function to extract text from PDF
-def extract_text_from_pdf(uploaded_file):
-    try:
-        pdf_reader = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-        text = ""
-        for page in pdf_reader:
-            text += page.get_text()
-        return text
-    except Exception as e:
-        st.error(f"Error extracting text from PDF: {e}")
-        return ""
-
-# Function to extract text from Word documents
-def extract_text_from_docx(uploaded_file):
-    try:
-        doc = Document(uploaded_file)
-        text = "\n".join([para.text for para in doc.paragraphs])
-        return text
-    except Exception as e:
-        st.error(f"Error extracting text from Word document: {e}")
-        return ""
-
-# Function to generate questions from the summarized text
+# Function to generate questions
 def generate_questions(text, question_generator):
-    if not text.strip():
-        st.error("No text available for question generation.")
-        return []
-    questions = []
     try:
-        # Generate one question at a time
-        for sentence in text.split('. '):  # Split into sentences for question generation
-            if sentence:
-                question = question_generator(sentence, max_length=50, do_sample=False)
-                questions.append(question[0]['generated_text'])
+        questions = question_generator(text)
         return questions
     except Exception as e:
         st.error(f"Error generating questions: {e}")
         return []
 
-# Set up Streamlit app
-st.set_page_config(page_title="Interview Prep Chatbot", page_icon="💼")
-st.title("Interview Prep Chatbot 🤖")
-st.markdown("Upload your CV (PDF or Word) and get interview questions!")
+# Streamlit UI
+st.title("Document Summarization and Question Generation App")
 
-# File uploader for PDF and Word files
-uploaded_file = st.file_uploader("Choose a file...", type=["pdf", "docx"], label_visibility="visible")
+# Text input
+input_text = st.text_area("Paste your document text here:", height=300)
 
-if uploaded_file is not None:
-    # Load models
-    question_generator, summarizer = load_models()
+# Buttons for summarization and question generation
+if st.button("Summarize"):
+    with st.spinner("Summarizing..."):
+        summarizer = load_summarizer()
+        summary = summarize_text(input_text, summarizer)
+        if summary:
+            st.subheader("Summary:")
+            st.write(summary)
+        gc.collect()  # Free up memory
 
-    # Extract text based on file type
-    if uploaded_file.type == "application/pdf":
-        cv_text = extract_text_from_pdf(uploaded_file)
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        cv_text = extract_text_from_docx(uploaded_file)
-    else:
-        st.error("Unsupported file type.")
-        cv_text = ""
+if st.button("Generate Questions"):
+    with st.spinner("Generating questions..."):
+        question_generator = load_question_generator()
+        questions = generate_questions(input_text, question_generator)
+        if questions:
+            st.subheader("Generated Questions:")
+            for q in questions:
+                st.write(f"- {q['question']}")
 
-    if cv_text:
-        # Summarize the CV text
-        summary = summarize_text(cv_text, summarizer)
-        st.subheader("CV Summary:")
-        st.write(summary)
-
-        # Generate interview questions
-        questions = generate_questions(summary, question_generator)
-        st.subheader("Generated Interview Questions:")
-        for question in questions:
-            st.write(f"- {question}")
-
-st.markdown("Made with ❤️ by Your Name")
+# Footer
+st.markdown("### Note: The models may take some time to load on first use. Please be patient.")
