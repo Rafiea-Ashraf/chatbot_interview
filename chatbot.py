@@ -1,98 +1,96 @@
 import streamlit as st
 from transformers import pipeline
-from io import StringIO
+from io import BytesIO
 import fitz  # PyMuPDF for PDF handling
 from docx import Document
+import numpy as np
 
-# Load models with caching to improve performance
+# Load models only when needed to optimize memory usage
 @st.cache_resource
 def load_models():
     question_generator = pipeline("text2text-generation", model="valhalla/t5-base-qg-hl")
     summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
     return question_generator, summarizer
 
-question_generator, summarizer = load_models()
-
-def extract_text_from_file(uploaded_file):
-    if uploaded_file.type == "text/plain":  # Text file
-        return StringIO(uploaded_file.getvalue().decode("utf-8")).read()
-    elif uploaded_file.type == "application/pdf":  # PDF file
-        text = ""
-        pdf_document = fitz.open("pdf", uploaded_file.read())
-        for page_num in range(pdf_document.page_count):
-            page = pdf_document[page_num]
-            text += page.get_text()
-        return text
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":  # Word file (.docx)
-        doc = Document(uploaded_file)
-        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-        return text
-    else:
-        st.error("Unsupported file type.")
-        return None
-
-def generate_questions(text):
-    input_text = f"generate questions: {text}"
-    questions = question_generator(input_text, max_length=64, num_return_sequences=5)
-    return [q['generated_text'] for q in questions]
-
+# Function to summarize text
 def summarize_text(text):
-    if len(text) > 1000:  # Truncate text if too long
-        text = text[:1000]  # Limit to first 1000 characters
-    summary = summarizer(text, max_length=200, min_length=30, do_sample=False)
+    # Limit the text to the first 500 characters for summarization
+    text = text[:500]
+    summary = summarizer(text, max_length=100, min_length=30, do_sample=False)
     return summary[0]['summary_text']
 
-# Function to set a background image
-def set_background_image(image_url):
-    st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            background-image: url("{image_url}");
-            background-size: cover;
-            background-position: center;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+# Function to extract text from PDF
+def extract_text_from_pdf(uploaded_file):
+    pdf_reader = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    text = ""
+    for page in pdf_reader:
+        text += page.get_text()
+    return text
 
-# Set background image with the provided link
-set_background_image("https://wallpaperset.com/w/full/4/9/7/500747.jpg")
+# Function to extract text from Word documents
+def extract_text_from_docx(uploaded_file):
+    doc = Document(uploaded_file)
+    text = "\n".join([para.text for para in doc.paragraphs])
+    return text
 
-# App title with emoji and color styling
-st.markdown("<h1 style='color: #ff69b4; text-align: center;'>🎀 CV Interview Prep Chatbot 🎀</h1>", unsafe_allow_html=True)
-st.write("<p style='text-align: center;'>Upload your CV, and this chatbot will generate cute interview questions based on it. 💖💼</p>", unsafe_allow_html=True)
+# Function to generate questions from the summarized text
+def generate_questions(text):
+    questions = question_generator(text, max_length=50, num_return_sequences=5, do_sample=False)
+    return [q['generated_text'] for q in questions]
 
-# File uploader with multiple file type support
-st.markdown("<h3 style='color: #ff69b4;'>💌 Upload your CV (PDF, Word, or Text):</h3>", unsafe_allow_html=True)
-uploaded_file = st.file_uploader("", type=["txt", "pdf", "docx"])
+# Set up Streamlit app
+st.set_page_config(page_title="Interview Prep Chatbot", page_icon="💼")
+st.title("Interview Prep Chatbot 🤖")
+st.markdown("Upload your CV (PDF or Word) and get interview questions!")
 
-# Display stickers if file is uploaded
-if uploaded_file is not None:
-    # Extract text from the uploaded file
-    cv_text = extract_text_from_file(uploaded_file)
+# Image for the app
+st.image("https://wallpaperset.com/w/full/4/9/7/500747.jpg", use_column_width=True)
+
+# File uploader for PDF and Word files
+uploaded_file = st.file_uploader("Choose a CV file (PDF or Word)", type=["pdf", "docx"])
+
+if uploaded_file:
+    # Load models
+    question_generator, summarizer = load_models()
     
+    # Process the uploaded file
+    if uploaded_file.type == "application/pdf":
+        cv_text = extract_text_from_pdf(uploaded_file)
+    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        cv_text = extract_text_from_docx(uploaded_file)
+
+    # Summarize the CV text
     if cv_text:
-        try:
-            # Generate a summary of the CV
-            summary = summarize_text(cv_text)
-            st.markdown("<h3 style='color: #ff69b4;'>✨ Summary of your CV:</h3>", unsafe_allow_html=True)
-            st.write(summary)
+        summary = summarize_text(cv_text)
+        st.subheader("Summary of your CV:")
+        st.write(summary)
 
-            # Generate interview questions based on the summary
-            st.markdown("<h3 style='color: #ff69b4;'>📝 Generated Interview Questions:</h3>", unsafe_allow_html=True)
-            questions = generate_questions(summary)
-            for i, question in enumerate(questions):
-                st.write(f"{i + 1}. {question} 💬")
+        # Generate questions based on the summary
+        questions = generate_questions(summary)
+        st.subheader("Potential Interview Questions:")
+        for question in questions:
+            st.write(f"- {question}")
 
-        except Exception as e:
-            st.error(f"An error occurred during processing: {e}")
+# Add cute stickers and colors
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #f0f8ff; /* Light blue background */
+    }
+    h1 {
+        color: #ff4500; /* Orange */
+    }
+    h2 {
+        color: #ff69b4; /* Pink */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-    else:
-        st.error("The uploaded file does not contain readable text.")
-else:
-    st.markdown("<p style='color: #ff69b4; text-align: center;'>Please upload your CV to start generating questions!</p>", unsafe_allow_html=True)
+st.sidebar.markdown("### 🎉 Welcome to the Interview Prep Chatbot!")
+st.sidebar.markdown("Upload your CV and get prepared for your next interview!")
 
-# Cute stickers section
-st.markdown("<div style='text-align: center;'>🦄 🌈 🎉 🍓 🌸 🍩 🍪</div>", unsafe_allow_html=True)
+# Add a cute sticker image in the sidebar
+st.sidebar.image("https://img.icons8.com/ios/50/000000/clipboard.png", width=50)
