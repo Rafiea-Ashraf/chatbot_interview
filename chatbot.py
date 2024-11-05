@@ -3,7 +3,7 @@ from transformers import pipeline
 import fitz  # PyMuPDF for PDF handling
 from docx import Document
 
-# Load models
+# Load models with caching
 @st.cache_resource(show_spinner=False)
 def load_models():
     question_generator = pipeline("text2text-generation", model="valhalla/t5-base-qg-hl")
@@ -12,12 +12,15 @@ def load_models():
 
 # Function to summarize text
 def summarize_text(text, summarizer):
+    if not text.strip():
+        st.error("No text available for summarization.")
+        return ""
     try:
         summary = summarizer(text, max_length=100, min_length=30, do_sample=False)
         return summary[0]['summary_text']
     except Exception as e:
         st.error(f"Error summarizing text: {e}")
-        return "Summary generation failed."
+        return ""
 
 # Function to extract text from PDF
 def extract_text_from_pdf(uploaded_file):
@@ -43,6 +46,9 @@ def extract_text_from_docx(uploaded_file):
 
 # Function to generate questions from the summarized text
 def generate_questions(text, question_generator):
+    if not text.strip():
+        st.error("No text available for question generation.")
+        return []
     try:
         questions = question_generator(text, max_length=50, num_return_sequences=5, do_sample=False)
         return [q['generated_text'] for q in questions]
@@ -55,11 +61,8 @@ st.set_page_config(page_title="Interview Prep Chatbot", page_icon="💼")
 st.title("Interview Prep Chatbot 🤖")
 st.markdown("Upload your CV (PDF or Word) and get interview questions!")
 
-# Image for the app
-st.image("https://wallpaperset.com/w/full/4/9/7/500747.jpg", use_column_width=True)
-
 # File uploader for PDF and Word files
-uploaded_file = st.file_uploader("Choose a file...", type=["pdf", "docx"])
+uploaded_file = st.file_uploader("Choose a file...", type=["pdf", "docx"], label_visibility="visible")
 
 if uploaded_file is not None:
     # Load models
@@ -72,6 +75,7 @@ if uploaded_file is not None:
         cv_text = extract_text_from_docx(uploaded_file)
     else:
         st.error("Unsupported file type.")
+        cv_text = ""
 
     if cv_text:
         # Summarize the CV text
